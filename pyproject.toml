@@ -1,0 +1,16 @@
+[project]
+name = "hopswiki-web"
+version = "0.1.0"
+description = "Personal cross-domain wiki browser for Hopswiki, built with NiceGUI"
+requires-python = ">=3.12"
+dependencies = [
+    "nicegui>=2.16.0",
+    "python-frontmatter>=1.1.0",
+    "markdown>=3.7",
+    "python-dotenv>=1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]

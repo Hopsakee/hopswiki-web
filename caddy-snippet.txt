@@ -1,0 +1,10 @@
+## Add this block to the Caddyfile on the Hetzner server
+## Location: ~/hopsakee-server/config/caddy/conf/Caddyfile
+
+hopswiki.hopsakee.top {
+    forward_auth authelia:9091 {
+        uri /api/authz/forward-auth
+        copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+    }
+    reverse_proxy hopswiki-web:8080
+}

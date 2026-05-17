@@ -1,0 +1,18 @@
+services:
+  hopswiki-web:
+    image: hopswiki-web
+    container_name: hopswiki-web
+    restart: unless-stopped
+    build: .
+    environment:
+      - WIKI_PATH=/app/data/wiki
+      - APP_PORT=8080
+      - STORAGE_SECRET=${STORAGE_SECRET}
+    networks:
+      - hup
+    volumes:
+      - /mnt/HC_Volume_105122334/hopswiki:/app/data/wiki:ro
+
+networks:
+  hup:
+    external: true
