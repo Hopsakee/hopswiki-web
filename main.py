@@ -57,6 +57,19 @@ def main() -> None:
                 detail=f"reload failed: {exc.__class__.__name__}",
             ) from exc
         old_count = len(store.pages)
+        # WikiStore.load() does NOT raise when wiki_path is missing or unreadable —
+        # it silently produces zero pages. Reject the swap in that case so a
+        # misconfigured mount or temporarily-missing wiki dir cannot nuke the live
+        # store. A legitimately empty wiki (old_count == 0) is allowed through.
+        if len(new_store.pages) == 0 and old_count > 0:
+            logger.error(
+                "/_reload refused from %s — rebuilt store is empty (%d -> 0), keeping previous state",
+                client, old_count,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="reload refused: rebuilt store is empty",
+            )
         store.replace_state_from(new_store)
         dt_ms = (time.perf_counter() - t0) * 1000
         new_count = len(store.pages)
