@@ -21,6 +21,7 @@ class Settings:
     dark_mode: bool
     storage_secret: str
     reload_token: str
+    reload_min_interval_s: float
 
     @property
     def wiki_exists(self) -> bool:
@@ -37,4 +38,5 @@ def load_settings() -> Settings:
         dark_mode=env_flag("DARK_MODE", default=True),
         storage_secret=os.getenv("STORAGE_SECRET", "hopswiki-web-storage-secret"),
         reload_token=os.getenv("RELOAD_TOKEN", "").strip(),
+        reload_min_interval_s=max(0.0, float(os.getenv("RELOAD_MIN_INTERVAL_S", "30"))),
     )

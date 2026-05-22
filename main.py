@@ -1,5 +1,6 @@
 import hmac
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,8 +37,13 @@ def main() -> None:
             len(reload_token),
         )
 
+    reload_min_interval_s = settings.reload_min_interval_s
+    throttle_lock = threading.Lock()
+    last_reload_at = 0.0
+
     @app.post("/_reload")
     def reload_endpoint(request: Request) -> dict:
+        nonlocal last_reload_at
         client = request.client.host if request.client else "unknown"
         if not reload_token:
             logger.warning("/_reload denied from %s — RELOAD_TOKEN not configured", client)
@@ -46,6 +52,26 @@ def main() -> None:
         if not hmac.compare_digest(header_token, reload_token):
             logger.warning("/_reload denied from %s — bad or missing X-Reload-Token", client)
             raise HTTPException(status_code=401, detail="unauthorized")
+        # Throttle: refuse if a reload was accepted less than reload_min_interval_s
+        # ago. Lock makes check+set atomic so concurrent valid-token callers
+        # serialize — one wins and proceeds to load(), the rest get 429.
+        # Counts on accept (not on success) — a failed load still counts as
+        # "you triggered a load attempt, wait before triggering another".
+        with throttle_lock:
+            now = time.monotonic()
+            elapsed = now - last_reload_at
+            if reload_min_interval_s > 0 and elapsed < reload_min_interval_s:
+                retry_after = reload_min_interval_s - elapsed
+                logger.warning(
+                    "/_reload throttled from %s — %.1fs since last accepted reload (min %.0fs)",
+                    client, elapsed, reload_min_interval_s,
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"reload throttled: retry in {retry_after:.0f}s",
+                    headers={"Retry-After": str(max(1, int(retry_after) + 1))},
+                )
+            last_reload_at = now
         t0 = time.perf_counter()
         try:
             new_store = WikiStore(store.wiki_path)
