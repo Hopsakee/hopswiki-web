@@ -20,6 +20,7 @@ class Settings:
     port: int
     dark_mode: bool
     storage_secret: str
+    reload_token: str
 
     @property
     def wiki_exists(self) -> bool:
@@ -35,4 +36,5 @@ def load_settings() -> Settings:
         port=int(os.getenv("APP_PORT", "8082")),
         dark_mode=env_flag("DARK_MODE", default=True),
         storage_secret=os.getenv("STORAGE_SECRET", "hopswiki-web-storage-secret"),
+        reload_token=os.getenv("RELOAD_TOKEN", "").strip(),
     )

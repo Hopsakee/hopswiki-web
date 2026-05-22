@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -82,6 +83,20 @@ class WikiStore:
         self._all_pages: list[WikiPage] = []
         self._all_tags: list[str] = []
         self._stats: WikiStats | None = None
+        self._swap_lock = threading.Lock()
+
+    def replace_state_from(self, other: WikiStore) -> None:
+        # Multi-attribute swap is single-bytecode-op per attribute under the
+        # GIL, but a reader sequencing two getter calls across the swap may
+        # observe a brief mixed state (μs). For the wiki's read profile
+        # (humans browsing) this is near-zero risk; revisit if RPS rises.
+        with self._swap_lock:
+            self.pages = other.pages
+            self._slug_to_folder = other._slug_to_folder
+            self._folder_pages = other._folder_pages
+            self._all_pages = other._all_pages
+            self._all_tags = other._all_tags
+            self._stats = other._stats
 
     def load(self) -> None:
         self.pages.clear()
