@@ -82,6 +82,48 @@ Designed to run on the Hetzner VM (`hopsakee-server`) behind Caddy + Authelia.
 Wiki data mounted read-only. Config goes at
 `~/hopsakee-server/config/hopswiki-web/`. Deploy via `deploy.sh`.
 
+## Refresh Contract — rsync new wiki content, then restart
+
+`WikiStore.load()` runs ONCE at process startup. New files arriving in the
+bind-mount source are visible from inside the container but the in-memory
+`store.pages` dict is frozen at boot. After every meaningful rsync the
+container has to be restarted:
+
+```bash
+# Both sides reference wiki/ explicitly — symmetric trailing slashes:
+rsync -avh --delete -e 'ssh -i ~/.ssh/sledge_wsl' \
+  ~/Drive/Hopswiki/wiki/ \
+  ubuntu@hopsakee.top:/mnt/HC_Volume_105122334/hopswiki/wiki/
+
+ssh -i ~/.ssh/sledge_wsl ubuntu@hopsakee.top 'docker restart hopswiki-web'
+```
+
+A `/_reload` endpoint avoids the container restart:
+
+```bash
+curl -fsS -X POST -H "X-Reload-Token: $RELOAD_TOKEN" \
+  https://hopswiki.hopsakee.top/_reload
+```
+
+The handler rebuilds the wiki store into a fresh `WikiStore`, then atomically
+swaps the in-memory state on the live store. On `load()` failure the previous
+state is left untouched and the endpoint returns 500. Success returns JSON
+with `status`, `pages`, `delta`, `elapsed_ms`, and `loaded_at`.
+
+**Operator note:** `RELOAD_TOKEN` MUST be set in the deployed env (e.g. the
+`hopswiki-web` compose `environment:` block on the Hetzner VM). When unset
+the endpoint returns 503 on every call. Tokens shorter than 16 chars trigger
+a startup warning. The token is read at startup and stripped of surrounding
+whitespace; `X-Reload-Token` header is compared via `hmac.compare_digest`.
+
+**Authelia note:** the public URL is gated by Authelia (`one_factor` policy
+on `hopswiki.hopsakee.top`). External `curl` from a nightly script will hit
+the Authelia redirect first. The intended deploy pattern is either an
+Authelia bypass rule on `/_reload` (the handler's own token check stays the
+load-bearing security layer), or invoking the curl from inside the Hetzner
+VM via SSH against the internal docker network. That choice is owned by the
+sibling nightly-rsync-script project.
+
 ## Vibecoded
 
 This project was AI-assisted without line-by-line manual review. It is a
