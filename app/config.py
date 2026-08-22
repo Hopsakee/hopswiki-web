@@ -51,7 +51,7 @@ def load_settings() -> Settings:
         wiki_path=Path(os.getenv("WIKI_PATH", "~/Drive/Hopswiki/wiki")).expanduser(),
         title=os.getenv("APP_TITLE", "Hopswiki"),
         host=os.getenv("APP_HOST", "0.0.0.0"),
-        port=int(os.getenv("APP_PORT", "8082")),
+        port=int(os.getenv("APP_PORT", "8080")),
         dark_mode=env_flag("DARK_MODE", default=True),
         storage_secret=os.getenv("STORAGE_SECRET", "hopswiki-web-storage-secret"),
         reload_token=read_secret("RELOAD_TOKEN"),
