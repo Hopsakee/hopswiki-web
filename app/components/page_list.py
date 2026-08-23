@@ -7,6 +7,7 @@ from html import escape
 from nicegui import ui
 
 from app.components.badges import type_badge
+from app.components.pagination import paginate, pagination_controls
 from app.wiki import WikiPage, WikiStore
 
 SORT_OPTIONS = {
@@ -16,11 +17,16 @@ SORT_OPTIONS = {
     "total_links": "Total links",
 }
 
+# Every key ends in `p.slug` so the order is total: two pages can share a title
+# (one pair does today), and a tie that resolves differently between two renders
+# would let an item jump across a window boundary — appearing twice, or not at all.
 SORT_KEYS = {
-    "name": lambda p: p._title_lower,
-    "backlinks": lambda p: (-len(p.backlinks), p._title_lower),
-    "outlinks": lambda p: (-len(p.outlinks), p._title_lower),
-    "total_links": lambda p: (-(len(p.backlinks) + len(p.outlinks)), p._title_lower),
+    "name": lambda p: (p._title_lower, p.slug),
+    "backlinks": lambda p: (-len(p.backlinks), p._title_lower, p.slug),
+    "outlinks": lambda p: (-len(p.outlinks), p._title_lower, p.slug),
+    "total_links": lambda p: (
+        -(len(p.backlinks) + len(p.outlinks)), p._title_lower, p.slug
+    ),
 }
 
 
@@ -31,12 +37,21 @@ def _collect_tags(pages: list[WikiPage]) -> list[str]:
     return sorted(tags)
 
 
-def tag_pill(tag: str, active: bool = False, on_click=None) -> None:
-    """Render a tag pill. Shared across all pages for consistent styling."""
+def _pill_html(tag: str, active: bool) -> str:
     cls = "tag-pill tag-pill-active" if active else "tag-pill"
-    el = ui.html(f'<span class="{cls}">{escape(tag)}</span>')
+    return f'<span class="{cls}">{escape(tag)}</span>'
+
+
+def tag_pill(tag: str, active: bool = False, on_click=None) -> ui.html:
+    """Render a tag pill. Shared across all pages for consistent styling.
+
+    Returns the element so a caller can restyle it in place via `set_content`
+    instead of rebuilding its container.
+    """
+    el = ui.html(_pill_html(tag, active))
     if on_click:
         el.on("click", on_click).style("cursor: pointer")
+    return el
 
 
 def page_list_controls(
@@ -45,28 +60,52 @@ def page_list_controls(
     *,
     show_type_badge: bool = True,
 ) -> None:
-    state = {"sort": "name", "active_tags": set(), "tags_expanded": False}
+    state = {"sort": "name", "active_tags": set(), "tags_expanded": False, "page": 0}
     available_tags = _collect_tags(pages)
+    # Panel pills are held by tag so a toggle can restyle the one that changed.
+    # Rebuilding the panel instead would construct one element per distinct tag
+    # (2498 of them at the current dataset size) on every single tag click.
+    panel_pills: dict[str, ui.html] = {}
+
+    def sync_panel_pill(tag: str) -> None:
+        el = panel_pills.get(tag)
+        if el is not None:
+            el.set_content(_pill_html(tag, tag in state["active_tags"]))
+
+    def after_filter_change() -> None:
+        # A changed filter always returns to the first window: keeping the user
+        # on page 12 of a list that just shrank to 3 pages is worse than resetting.
+        state["page"] = 0
+        render_active_row()
+        render_list()
 
     def toggle_tag(tag: str) -> None:
         if tag in state["active_tags"]:
             state["active_tags"].discard(tag)
         else:
             state["active_tags"].add(tag)
-        render_filter_bar()
-        render_list()
+        sync_panel_pill(tag)
+        after_filter_change()
 
     def clear_tags() -> None:
+        cleared = list(state["active_tags"])
         state["active_tags"].clear()
-        render_filter_bar()
-        render_list()
+        for tag in cleared:
+            sync_panel_pill(tag)
+        after_filter_change()
 
     def toggle_tags_panel() -> None:
         state["tags_expanded"] = not state["tags_expanded"]
-        render_filter_bar()
+        render_active_row()
+        render_tag_panel()
 
     def on_sort_change(e) -> None:
         state["sort"] = e.value
+        state["page"] = 0
+        render_list()
+
+    def go_to_page(page: int) -> None:
+        state["page"] = page
         render_list()
 
     # === Controls bar: sort + filter button + active filter display ===
@@ -86,9 +125,8 @@ def page_list_controls(
     # === Page list ===
     list_container = ui.column().classes("w-full gap-1")
 
-    def render_filter_bar() -> None:
+    def render_active_row() -> None:
         filter_bar.clear()
-        tag_panel.clear()
 
         with filter_bar:
             with ui.row().classes("items-center gap-2 flex-wrap"):
@@ -111,13 +149,20 @@ def page_list_controls(
                     "color: var(--accent); font-size: 0.8rem"
                 )
 
-        if state["tags_expanded"]:
-            with tag_panel:
-                with ui.element("div").classes("filter-panel").style("padding: 0.75rem"):
-                    with ui.row().classes("flex-wrap gap-1"):
-                        for tag in available_tags:
-                            is_active = tag in state["active_tags"]
-                            tag_pill(tag, is_active, lambda t=tag: toggle_tag(t))
+    def render_tag_panel() -> None:
+        tag_panel.clear()
+        panel_pills.clear()
+        if not state["tags_expanded"]:
+            return
+        with tag_panel:
+            with ui.element("div").classes("filter-panel").style("padding: 0.75rem"):
+                with ui.row().classes("flex-wrap gap-1"):
+                    for tag in available_tags:
+                        panel_pills[tag] = tag_pill(
+                            tag,
+                            tag in state["active_tags"],
+                            lambda t=tag: toggle_tag(t),
+                        )
 
     def render_list() -> None:
         list_container.clear()
@@ -129,13 +174,16 @@ def page_list_controls(
             ]
 
         key_fn = SORT_KEYS.get(state["sort"], SORT_KEYS["name"])
-        sorted_pages = sorted(filtered, key=key_fn)
+        # Sort and filter run over the FULL dataset; only the window is rendered,
+        # so ordering and counts stay globally correct at any page size.
+        window = paginate(sorted(filtered, key=key_fn), state["page"])
+        state["page"] = window.index
 
         with list_container:
-            ui.label(f"{len(sorted_pages)} pages").style(
+            ui.label(window.summary("pages")).style(
                 "color: var(--text-muted); font-size: 0.8rem"
             )
-            for page in sorted_pages:
+            for page in window.items:
                 with ui.row().classes(
                     "w-full items-center gap-3 px-4 py-2 rounded-lg"
                 ).style("transition: background-color 0.15s"):
@@ -157,6 +205,8 @@ def page_list_controls(
                         "color: var(--text-muted); font-size: 0.7rem; white-space: nowrap"
                     )
 
+            pagination_controls(window, go_to_page)
+
     # Initial render
-    render_filter_bar()
+    render_active_row()
     render_list()

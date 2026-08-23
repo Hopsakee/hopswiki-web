@@ -37,6 +37,11 @@ WIKI_PATH=/path/to/your/wiki uv run main.py
 - Keep modules focused: pages in `app/pages/`, reusable UI in `app/components/`, data logic in `app/wiki.py`
 - Use CSS variables (`var(--text-primary)`, etc.) for theme-aware styling — never hardcode colors
 - Test that changes work in both dark and light mode
+- **No page handler may construct a number of elements that scales with corpus size.** NiceGUI serialises the entire element tree into the initial HTTP response, so cost scales with the elements *constructed*, not with what the viewport shows — roughly 1.25 ms and 250 bytes each. An unwindowed 1383-page list cost 12.4 s and 3.08 MB before a browser saw a byte. This covers lists, but also tag clouds, sidebars, and anything else built in a loop over the wiki. There are exactly three sanctioned ways to satisfy it:
+  1. **Window it** through `paginate()` / `pagination_controls()` / `PAGE_SIZE` in `app/components/pagination.py`. Sort and filter still run over the full dataset in Python; only the window is rendered, so counts and ordering stay globally correct. `PAGE_SIZE` is the single tuning knob.
+  2. **Collapse and cap it** — keep it out of first paint *and* bound what a click constructs. Collapsed alone is not enough; it moves the cost to the interaction.
+  3. **Measure and annotate it** — if the loop grows on some axis other than corpus size, record the measured worst case in a comment next to the loop, as `_sidebar_section` in `app/pages/page.py` does.
+- **Known violation:** the tag-filter panel in `page_list.py` constructs one pill per distinct tag (2498 at the current dataset size, ~3.3 s / 988 KB) when expanded. It is collapsed by default and no longer rebuilds on each tag click, but it is not yet bounded. See the ISA.
 
 ## Making Changes
 

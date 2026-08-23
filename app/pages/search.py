@@ -4,6 +4,7 @@ from nicegui import ui
 
 from app.components.badges import type_badge
 from app.components.layout import page_layout
+from app.components.pagination import paginate, pagination_controls
 from app.config import Settings
 from app.wiki import WikiStore
 
@@ -19,35 +20,53 @@ def register(store: WikiStore, settings: Settings) -> None:
             )
 
             results_container = ui.column().classes("w-full gap-2")
+            query = ""
+            page = 0
 
-            def do_search(e) -> None:
-                query = e.value.strip()
+            def on_input(e) -> None:
+                # A new query always starts at the first window; paging within
+                # one query keeps its position.
+                nonlocal query, page
+                # `clearable` hands back None when the x is clicked.
+                query, page = (e.value or "").strip(), 0
+                render_results()
+
+            def go_to_page(new_page: int) -> None:
+                nonlocal page
+                page = new_page
+                render_results()
+
+            def render_results() -> None:
+                nonlocal page
                 results_container.clear()
-                if not query or len(query) < 2:
+                if len(query) < 2:
                     return
                 results = store.search(query)
                 with results_container:
                     if not results:
                         ui.label("No results found.").style("color: var(--text-muted)")
                         return
-                    ui.label(f"{len(results)} results").style(
+                    window = paginate(results, page)
+                    page = window.index
+                    ui.label(window.summary("results")).style(
                         "color: var(--text-muted); font-size: 0.875rem"
                     )
-                    for page in results:
-                        with ui.link(target=page.url).classes("no-underline w-full"):
+                    for result in window.items:
+                        with ui.link(target=result.url).classes("no-underline w-full"):
                             with ui.element("div").classes(
                                 "wiki-card flex items-center gap-4"
                             ):
-                                type_badge(page.type)
+                                type_badge(result.type)
                                 with ui.column().classes("flex-1 gap-1"):
-                                    ui.label(page.title).style(
+                                    ui.label(result.title).style(
                                         "color: var(--text-primary); font-size: 0.875rem; font-weight: 500"
                                     )
-                                    ui.label(page.snippet[:150]).style(
+                                    ui.label(result.snippet[:150]).style(
                                         "color: var(--text-muted); font-size: 0.75rem"
                                     )
+                    pagination_controls(window, go_to_page)
 
             ui.input(
                 placeholder="Search by title, content, or tags...",
-                on_change=do_search,
+                on_change=on_input,
             ).classes("w-full search-input").props('clearable outlined debounce="300"')
