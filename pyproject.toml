@@ -14,3 +14,8 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+
+[tool.pytest.ini_options]
+# Import `app.*` from the repo root without installing the project.
+pythonpath = ["."]
+testpaths = ["tests"]
