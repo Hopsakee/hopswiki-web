@@ -41,7 +41,7 @@ WIKI_PATH=/path/to/your/wiki uv run main.py
   1. **Window it** through `paginate()` / `pagination_controls()` / `PAGE_SIZE` in `app/components/pagination.py`. Sort and filter still run over the full dataset in Python; only the window is rendered, so counts and ordering stay globally correct. `PAGE_SIZE` is the single tuning knob.
   2. **Collapse and cap it** — keep it out of first paint *and* bound what a click constructs. Collapsed alone is not enough; it moves the cost to the interaction.
   3. **Measure and annotate it** — if the loop grows on some axis other than corpus size, record the measured worst case in a comment next to the loop, as `_sidebar_section` in `app/pages/page.py` does.
-- **Known violation:** the tag-filter panel in `page_list.py` constructs one pill per distinct tag (2498 at the current dataset size, ~3.3 s / 988 KB) when expanded. It is collapsed by default and no longer rebuilds on each tag click, but it is not yet bounded. See the ISA.
+- **Known violation:** the tag-filter panel in `page_list.py` constructs one pill per distinct tag (2498 at the current dataset size, ~3.3 s / 988 KB) when expanded. It is collapsed by default and no longer rebuilds on each tag click, but it is not yet bounded. Tracked in [#7](https://github.com/Hopsakee/hopswiki-web/issues/7).
 
 ## Making Changes
 
