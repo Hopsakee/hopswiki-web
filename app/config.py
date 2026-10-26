@@ -47,13 +47,18 @@ class Settings:
 
 def load_settings() -> Settings:
     load_dotenv()
+    storage_secret = os.getenv("STORAGE_SECRET", "").strip()
+    if not storage_secret:
+        raise RuntimeError(
+            "STORAGE_SECRET is not set; set it to a long random value (NiceGUI storage signing key)."
+        )
     return Settings(
         wiki_path=Path(os.getenv("WIKI_PATH", "~/Drive/Hopswiki/wiki")).expanduser(),
         title=os.getenv("APP_TITLE", "Hopswiki"),
         host=os.getenv("APP_HOST", "0.0.0.0"),
         port=int(os.getenv("APP_PORT", "8080")),
         dark_mode=env_flag("DARK_MODE", default=True),
-        storage_secret=os.getenv("STORAGE_SECRET", "hopswiki-web-storage-secret"),
+        storage_secret=storage_secret,
         reload_token=read_secret("RELOAD_TOKEN"),
         reload_min_interval_s=max(0.0, float(os.getenv("RELOAD_MIN_INTERVAL_S", "30"))),
     )
