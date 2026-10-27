@@ -52,7 +52,7 @@ The app starts at http://localhost:8082.
 | `APP_HOST` | `0.0.0.0` | Bind address |
 | `APP_PORT` | `8082` | HTTP port (pkw-web sits on 8081) |
 | `DARK_MODE` | `true` | Start in dark mode |
-| `STORAGE_SECRET` | `hopswiki-web-storage-secret` | NiceGUI user-storage signing key |
+| `STORAGE_SECRET` | none (required, app refuses to start if unset) | NiceGUI user-storage signing key |
 
 ## Wiki Format
 
