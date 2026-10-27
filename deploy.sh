@@ -16,4 +16,5 @@ fi
 
 # Build and start
 cd "$CDIR"
+grep -q '^STORAGE_SECRET=.' .env 2>/dev/null || echo "STORAGE_SECRET=$(openssl rand -base64 48 | tr -d '\n')" >> .env
 docker compose up --build -d
